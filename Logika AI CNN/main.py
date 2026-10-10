@@ -1,7 +1,6 @@
 import pygame
 import torch
-from clases import Tile, Button
-from clases import Vex
+from clases import Tile, Button, Vex
 
 vex = Vex(10)
 vex.load_state_dict(torch.load("weights\\vex_weight.pth", weights_only=True))
@@ -21,6 +20,7 @@ brush_radius, brush_power = 1, 150
 eraser_radius, eraser_power = 2, -255
 
 click_sound = pygame.mixer.Sound("sound\\click.mp3")
+clear_sound = pygame.mixer.Sound("sound\\clear_botton_sound.wav")
 
 get_click = False
 
@@ -155,15 +155,17 @@ while running:
             running = False
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                get_click = clear_Button.colidemause(mouse_pos)
+            if event.button == 1 and clear_Button.click(event.pos):
+                changed = any(tile.color > 0 for row in tiles for tile in row)
 
+                if changed:
+                    clear_sound.play()
 
-    if get_click:
-        for tile_row in tiles:
-            for tile_col in tile_row:
-                tile_col.color = 0
+                for row in tiles:
+                    for tile in row:
+                        tile.color = 0
 
+    keys = pygame.key.get_pressed()
 
     pygame.display.update()
     clock.tick(100)
