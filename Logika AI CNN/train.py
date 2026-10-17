@@ -6,7 +6,19 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from clases import Vex
 
-transform = transforms.ToTensor()
+transform = transforms.Compose([
+    transforms.RandomAffine(
+        degrees=15,
+        translate=(0.15, 0.15),
+        scale=(0.75, 1.25),
+        shear=10
+    ),
+    transforms.RandomPerspective(
+        distortion_scale=0.2,
+        p=0.3
+    ),
+    transforms.ToTensor()
+])
 
 train_dataset = MNIST(
     root="data",
@@ -40,7 +52,7 @@ except Exception as e:
     vex = Vex(10)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.AdamW(vex.parameters(), lr=0.00001)
+optimizer = optim.AdamW(vex.parameters(), lr=0.001)
 
 for epoch in range(50):
     total_loss = 0
