@@ -2,171 +2,145 @@ import pygame
 import torch
 from clases import Tile, Button, Vex
 
-vex = Vex(10)
-vex.load_state_dict(torch.load("weights\\vex_weight.pth", weights_only=True))
-vex.eval()
-
 pygame.init()
 
-wight, height = 800, 600
-
+WIDTH, HEIGHT = 800, 600
 WHITE = (255, 255, 255)
-RED = (255, 0, 0)
 GRAY = (79, 79, 79)
 GREEN = (4, 148, 7)
 
-tile_size, start_x, start_y = 15, 49, 99
-brush_radius, brush_power = 1, 150
-eraser_radius, eraser_power = 2, -255
+TILE_SIZE = 15
+START_X, START_Y = 49, 99
+
+BRUSH_RADIUS, BRUSH_POWER = 1, 150
+ERASER_RADIUS, ERASER_POWER = 2, -255
+
+window = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("CNN MNIST")
+clock = pygame.time.Clock()
 
 click_sound = pygame.mixer.Sound("sound\\click.mp3")
 clear_sound = pygame.mixer.Sound("sound\\clear_botton_sound.wav")
 
-get_click = False
+vex = Vex(10)
+vex.load_state_dict(torch.load("weights\\vex_weight.pth", weights_only=True))
+vex.eval()
 
-window = pygame.display.set_mode((wight, height))
-pygame.display.set_caption("Convolutional Neural Network MNIST")
 
-clock = pygame.time.Clock()
-
-def zone_draw(tile_size, start_x, start_y, border_width):
+def create_tiles():
     tiles = []
 
-    zone_size = tile_size * 28
-
-    border = pygame.Rect(start_x - border_width, start_y - border_width, zone_size + border_width * 2, zone_size + border_width * 2)
-
     for row in range(28):
-        row_tiles = []
+        tile_row = []
 
         for col in range(28):
-            x = start_x + col * tile_size
-            y = start_y + row * tile_size
+            x = START_X + col * TILE_SIZE
+            y = START_Y + row * TILE_SIZE
 
-            tile = Tile(x, y, tile_size, tile_size, click_sound, color=0)
+            tile = Tile(x, y, TILE_SIZE, TILE_SIZE, click_sound, color=0)
+            tile_row.append(tile)
 
-            row_tiles.append(tile)
+        tiles.append(tile_row)
 
-        tiles.append(row_tiles)
-
-    return tiles, border
+    return tiles
 
 def brush(tiles, row, col, radius, power):
     max_change = 0
 
     for r in range(row - radius, row + radius + 1):
         for c in range(col - radius, col + radius + 1):
-
             if 0 <= r < 28 and 0 <= c < 28:
                 distance = ((r - row) ** 2 + (c - col) ** 2) ** 0.5
 
                 if distance <= radius:
                     strength = 1 - distance / (radius + 1)
-
                     change = tiles[r][c].update(power * strength)
                     max_change = max(max_change, change)
 
     return max_change
 
+def predict(tiles):
+    x = [[tile.color for tile in row] for row in tiles]
+
+    x = torch.tensor(x, dtype=torch.float32)
+    x = (x / 255.0).unsqueeze(0).unsqueeze(0)
+
+    with torch.no_grad():
+        return torch.softmax(vex(x), dim=1)[0]
+
+
+tiles = create_tiles()
+
+border = pygame.Rect(START_X - 10, START_Y - 10, TILE_SIZE * 28 + 20, TILE_SIZE * 28 + 20)
+
 font = pygame.font.SysFont("Arial", 20)
+clear_button = Button(START_X - 10, 540, 440, 50, "Очистити", font, GRAY, 20)
 
-clear_Button = Button(start_x-10, 540, 440, 50, "Очистити", font, GRAY, 20)
-
-tiles, border = zone_draw(tile_size, start_x, start_y, 10)
-
-classes_numbers = []
-classes_numbers_num = []
-classes_numbers_text = []
-classes_font = pygame.font.SysFont("Arial", 20)
-
-for index in range(10):
-    classes_numbers_num.append(index)
-    classes_numbers.append(pygame.rect.Rect(550, 140, 0, 25))
-    text = classes_font.render(str(index), True, (0, 0, 0))
-    classes_numbers_text.append(text)
-
-for index in range(10):
-    classes_numbers[index].y += 35 * index
+class_bars = [pygame.Rect(550, 140 + i * 35, 0, 25) for i in range(10)]
+class_texts = [font.render(str(i), True, (0, 0, 0)) for i in range(10)]
 
 count = 0
 running = True
+
 while running:
     count += 1
     window.fill(WHITE)
     pygame.draw.rect(window, (36, 36, 36), border)
 
     mouse_pos = pygame.mouse.get_pos()
-    mouse_x = mouse_pos[0]
-    mouse_y = mouse_pos[1]
+    mouse_x, mouse_y = mouse_pos
 
-    if pygame.mouse.get_pressed()[0]:
-        col = (mouse_x - start_x) // tile_size
-        row = (mouse_y - start_y) // tile_size
+    col = (mouse_x - START_X) // TILE_SIZE
+    row = (mouse_y - START_Y) // TILE_SIZE
 
-        if 0 <= col < 28 and 0 <= row < 28:
-            change = brush(tiles, row, col, radius=brush_radius, power=brush_power)
+    if 0 <= col < 28 and 0 <= row < 28:
+        buttons = pygame.mouse.get_pressed()
+
+        if buttons[0]:
+            change = brush(tiles, row, col, BRUSH_RADIUS, BRUSH_POWER)
 
             if count % 10 == 0 and change > 0:
-                volume = change / 255
-                click_sound.set_volume(volume)
+                click_sound.set_volume(change / 255)
                 click_sound.play()
 
-    if pygame.mouse.get_pressed()[2]:
-        col = (mouse_x - start_x) // tile_size
-        row = (mouse_y - start_y) // tile_size
-
-        if 0 <= col < 28 and 0 <= row < 28:
-            change = brush(tiles, row, col, radius=eraser_radius, power=eraser_power)
+        if buttons[2]:
+            change = brush(tiles, row, col, ERASER_RADIUS, ERASER_POWER)
 
             if count % 10 == 0 and change > 0:
-                volume = change / 255
-                click_sound.set_volume(volume)
+                click_sound.set_volume(change / 255)
                 click_sound.play()
 
     for tile_row in tiles:
-        for tile_col in tile_row:
-            tile_col.draw(window)
+        for tile in tile_row:
+            tile.draw(window)
 
-    clear_Button.colidemause(mouse_pos)
-    clear_Button.draw(window)
+    clear_button.colidemause(mouse_pos)
+    clear_button.draw(window)
 
-    x = []
+    probabilities = predict(tiles)
 
-    for row in tiles:
-        row_list_number = []
-        for col in row:
-            row_list_number.append(col.color)
-        x.append(row_list_number)
+    for i in range(10):
+        class_bars[i].width = int(probabilities[i] * 100)
 
-    x = torch.tensor(x, dtype=torch.float32)
-    x = x / 255.0
-    x = x.unsqueeze(0).unsqueeze(0)
-
-    with torch.no_grad():
-        y = torch.softmax(vex(x), dim=1)[0]
-
-    for index in range(10):
-        classes_numbers[index].width= int(y[index] * 100)
-        pygame.draw.rect(window, GREEN, classes_numbers[index])
-        window.blit(classes_numbers_text[index], (520, classes_numbers[index].y))
+        pygame.draw.rect(window, GREEN, class_bars[i])
+        window.blit(class_texts[i], (520, class_bars[i].y))
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and clear_Button.click(event.pos):
+            if event.button == 1 and clear_button.click(event.pos):
                 changed = any(tile.color > 0 for row in tiles for tile in row)
 
                 if changed:
                     clear_sound.play()
 
-                for row in tiles:
-                    for tile in row:
+                for tile_row in tiles:
+                    for tile in tile_row:
                         tile.color = 0
-
-    keys = pygame.key.get_pressed()
 
     pygame.display.update()
     clock.tick(100)
+
 pygame.quit()
